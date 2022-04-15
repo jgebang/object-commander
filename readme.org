@@ -1,0 +1,28 @@
+#+TITLE: Object-commander
+
+=object-commander= is an easy manager for the objects' initialization and access the them with container.
+
+* why object commander
+
+In golang, we mainly rely on the ~init~ function to handle the object's initialization and maybe other things to run when impoting the package. Indeed, it's a powerful feature but it introduces a =side effect=! Try to imagine that you get a slow startup of your application by just importing a package. When digging into the package, you find there is a time-consuming function in the ~init~ function. Surprised! Can you imagine if the situations appear everywhere?
+
+Implicity makes codes hard to maintain. Explicity is the rescue. I want the initialization to be clear as I command. For example, you can clearly describe the procedure to initialize the resources(ex. db connection, redis connection, etc.) before running your service. I will show the example usage below.
+
+* Install
+
+  #+begin_src sh
+    go get -u https://github.com/jgebang/object-commander
+  #+end_src
+
+* Feature
+
+- no external dependencies
+- make your initialization explicity
+- reduce the opportunity of circular import
+
+
+* example
+
+  #+begin_src go
+
+  #+end_src

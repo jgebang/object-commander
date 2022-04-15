@@ -47,8 +47,12 @@ func (b *Bootstrap) Release() {
 }
 
 // Boot executes the series of procedures
-// If lazy is true, the definition in the each procedures will only executed
-// when calling the container's get method
+// If lazy is true, the definition in the each procedures will only executed when
+// calling the container's get method.
+//
+// That means the resources will only be initialized when accessing the resource stored in the container.
+// In normal situation, lazy is set to false because we want the resources are prepared before spawning our
+// main application.
 func (b *Bootstrap) Boot(procedures []Manager, lazy bool) *Bootstrap {
 
 	for _, p := range procedures {

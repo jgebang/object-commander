@@ -42,12 +42,12 @@ type Container struct {
 	sync.RWMutex
 }
 
-// Register add the definition to builders
-func (c *Container) Register(def *Definition) error {
+// Register adds the definition to builders
+func (c *Container) register(def *Definition, overwrite bool) error {
 	c.Lock()
 	defer c.Unlock()
 
-	if _, exists := c.builders[def.Name]; exists {
+	if _, exists := c.builders[def.Name]; exists && !overwrite {
 		return AlreadRegisteredError{
 			msg: fmt.Sprintf("%s was already registered", def.Name),
 		}
@@ -56,6 +56,11 @@ func (c *Container) Register(def *Definition) error {
 	c.builders[def.Name] = def.Build
 
 	return nil
+}
+
+// Register add the definition to builders
+func (c *Container) Register(def *Definition) error {
+	return c.register(def, false)
 }
 
 // Unregister removes the definition from the builders
@@ -107,4 +112,9 @@ func (c *Container) Create(name Identity) (interface{}, error) {
 	}
 
 	return builder(c), nil
+}
+
+// Replace to replace the registered definition
+func (c *Container) Replace(def *Definition) error {
+	return c.register(def, true)
 }

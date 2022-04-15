@@ -20,9 +20,45 @@ Implicity makes codes hard to maintain. Explicity is the rescue. I want the init
 - make your initialization explicity
 - reduce the opportunity of circular import
 
-
 * example
 
   #+begin_src go
+    type dbManager struct {}
 
+    func (d *dbManager) ID() Identity {
+        return Identity("db")
+    }
+
+    func (d *dbManager) Start(c *Container) error {
+        c.Register(&Definition{
+            Name: d.ID(),
+            Build: func(c *Container) interface{} {
+                // create db connection
+            },
+        })
+
+        return nil
+    }
+
+    func (d *dbManager) Close(c *Container) error {
+
+        db, err := c.Get(d.ID())
+        if err != nil {
+            return err
+        }
+
+        // release db connection
+        return nil
+    }
+
+    b := NewBootstrap(nil)
+    steps := []Manager{
+        &dbManager{},
+    }
+
+    b.Boot(steps, false).Run(func() {
+        // do something for you main application
+        // ex.
+        // run server
+    })
   #+end_src

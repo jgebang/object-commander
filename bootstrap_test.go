@@ -12,14 +12,14 @@ var loadtracker string
 type dbManager struct {
 }
 
-func (con *dbManager) ID() Identity {
+func (dbm *dbManager) ID() Identity {
 	return Identity("db")
 }
 
-func (con *dbManager) Start(c *Container) error {
+func (dbm *dbManager) Start(c *Container) error {
 
 	c.Register(&Definition{
-		Name: con.ID(),
+		Name: dbm.ID(),
 		Build: func(c *Container) interface{} {
 			loadtracker += "db"
 			return "db"
@@ -29,9 +29,9 @@ func (con *dbManager) Start(c *Container) error {
 	return nil
 }
 
-func (con *dbManager) Close(c *Container) error {
+func (dbm *dbManager) Close(c *Container) error {
 
-	db, err := c.Get(con.ID())
+	db, err := c.Get(dbm.ID())
 	if err != nil {
 		return err
 	}

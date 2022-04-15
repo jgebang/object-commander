@@ -1,12 +1,21 @@
+#+HTML: <a href="https://goreportcard.com/report/github.com/jgebang/object-commander"><img src="https://goreportcard.com/badge/github.com/jgebang/object-commander" /></a>
+#+HTML: </div>
+
+#+HTML: <a href="https://codeclimate.com/github/jgebang/object-commander/maintainability"><img src="https://api.codeclimate.com/v1/badges/b9f4a3a327fb7b36e7ff/maintainability" /></a>
+#+HTML: </div>
+
+#+HTML: <a href="https://codeclimate.com/github/jgebang/object-commander/test_coverage"><img src="https://api.codeclimate.com/v1/badges/b9f4a3a327fb7b36e7ff/test_coverage" /></a>
+#+HTML: </div>
+
 #+TITLE: Object-commander
 
 =object-commander= is an easy manager for the objects' initialization and access the them with container.
 
 * why object commander
 
-In golang, we mainly rely on the ~init~ function to handle the object's initialization and maybe other things to run when impoting the package. Indeed, it's a powerful feature but it introduces a =side effect=! Try to imagine that you get a slow startup of your application by just importing a package. When digging into the package, you find there is a time-consuming function in the ~init~ function. Surprised! Can you imagine if the situations appear everywhere?
+  In golang, we mainly rely on the ~init~ function to handle the object's initialization and maybe other things to run when impoting the package. Indeed, it's a powerful feature but it introduces a =side effect=! Try to imagine that you get a slow startup of your application by just importing a package. When digging into the package, you find there is a time-consuming function in the ~init~ function. Surprised! Can you imagine if the situations appear everywhere?
 
-Implicity makes codes hard to maintain. Explicity is the rescue. I want the initialization to be clear as I command. For example, you can clearly describe the procedure to initialize the resources(ex. db connection, redis connection, etc.) before running your service. I will show the example usage below.
+  Implicity makes codes hard to maintain. Explicity is the rescue. I want the initialization to be clear as I command. For example, you can clearly describe the procedure to initialize the resources(ex. db connection, redis connection, etc.) before running your service. I will show the example usage below.
 
 * Install
 
@@ -16,9 +25,9 @@ Implicity makes codes hard to maintain. Explicity is the rescue. I want the init
 
 * Feature
 
-- no external dependencies
-- make your initialization explicity
-- reduce the opportunity of circular import
+  - no external dependencies
+  - make your initialization explicity
+  - reduce the opportunity of circular import
 
 * example
 
@@ -50,7 +59,11 @@ Implicity makes codes hard to maintain. Explicity is the rescue. I want the init
         // release db connection
         return nil
     }
+  #+end_src
 
+
+  #+begin_src go
+    // in your main.go
     b := NewBootstrap(nil)
     steps := []Manager{
         &dbManager{},

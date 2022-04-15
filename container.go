@@ -49,7 +49,7 @@ func (c *Container) Register(def *Definition) error {
 
 	if _, exists := c.builders[def.Name]; exists {
 		return AlreadRegisteredError{
-			msg: fmt.Sprintf("%s was already registerd", def.Name),
+			msg: fmt.Sprintf("%s was already registered", def.Name),
 		}
 	}
 

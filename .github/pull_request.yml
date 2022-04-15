@@ -1,0 +1,43 @@
+name: PR-CI
+
+# Controls when the action will run. Triggers the workflow on push or pull request
+# events but only for the master branch
+on:
+  pull_request:
+    branches: [ master ]
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  test:
+    # The type of runner that the job will run on
+    name: Test
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      - name: set up go 1.x
+        uses: actions/setup-go@v2
+        with:
+          go-version: '1.16.4'
+        id: go
+
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - name: checkt out
+        uses: actions/checkout@v2
+
+      # Runs test
+      - name: run test
+        run: |
+          go test -v ./...
+
+      # Generate test coverage for code climate
+      - name: generate test coverage
+        uses: paambaati/codeclimate-action@v2.6.0
+        env:
+          CC_TEST_REPORTER_ID: ${{ secrets.CC_TEST_REPORTED_ID }}
+        with:
+          debug: true
+          prefix: github.com/sillygod/cdp-cache
+          coverageCommand: go test -coverprofile=c.out ./...
+          coverageLocations: ${{ github.workspace }}/c.out:gocov

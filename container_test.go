@@ -116,7 +116,7 @@ func TestGetNonRegisterdDef(t *testing.T) {
 
 	_, err := c.Get(Identity("nop"))
 	if !strings.Contains(err.Error(), "was not registered") {
-		t.Error("failed to detect nop is not registerd")
+		t.Error("failed to detect nop is not registered")
 	}
 }
 

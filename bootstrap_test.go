@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// a global varaible for testing usage
+// a global variable for testing usage
 var loadtracker string
 
 type dbManager struct {

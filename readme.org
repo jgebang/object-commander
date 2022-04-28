@@ -20,7 +20,7 @@
 * Install
 
   #+begin_src sh
-    go get -u https://github.com/jgebang/object-commander
+    go get -u github.com/jgebang/object-commander
   #+end_src
 
 * Feature

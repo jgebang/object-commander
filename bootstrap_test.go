@@ -18,12 +18,9 @@ func (dbm *dbManager) ID() Identity {
 
 func (dbm *dbManager) Start(c *Container) error {
 
-	c.Register(&Definition{
-		Name: dbm.ID(),
-		Build: func(c *Container) interface{} {
-			loadtracker += "db"
-			return "db"
-		},
+	c.Register(dbm.ID(), func(c *Container) interface{} {
+		loadtracker += "db"
+		return "db"
 	})
 
 	return nil
@@ -37,7 +34,7 @@ func (dbm *dbManager) Close(c *Container) error {
 	}
 
 	loadtracker = strings.Replace(loadtracker, "db", "", 1) // represent db resource is released
-	fmt.Printf("%s is closed", db.(string))
+	fmt.Printf("%s is closed\n", db.(string))
 	return nil
 }
 
@@ -48,12 +45,9 @@ func (l *logManager) ID() Identity {
 }
 
 func (l *logManager) Start(c *Container) error {
-	c.Register(&Definition{
-		Name: l.ID(),
-		Build: func(c *Container) interface{} {
-			loadtracker += "log"
-			return "log"
-		},
+	c.Register(l.ID(), func(c *Container) interface{} {
+		loadtracker += "log"
+		return "log"
 	})
 
 	return nil
@@ -67,7 +61,7 @@ func (l *logManager) Close(c *Container) error {
 	}
 
 	loadtracker = strings.Replace(loadtracker, "log", "", 1) // represent log resource is released
-	fmt.Printf("%s is closed", log.(string))
+	fmt.Printf("%s is closed\n", log.(string))
 	return nil
 }
 
@@ -89,7 +83,7 @@ func TestBoot(t *testing.T) {
 		&logManager{},
 	}
 
-	b.Boot(steps, false).Run(func() {
+	b.Boot(steps).Run(func() {
 
 		if loadtracker != "dblog" {
 			t.Error("steps were not executed")

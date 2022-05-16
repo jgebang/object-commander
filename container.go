@@ -49,20 +49,26 @@ type Container struct {
 
 // Register adds the definition to builders
 func (c *Container) register(def *Definition, overwrite bool) error {
-	c.Lock()
-	defer c.Unlock()
 
+	c.RLock()
 	if _, exists := c.builders[def.Name]; exists && !overwrite {
+
+		c.RUnlock()
 		return AlreadyRegisteredError{
 			msg: fmt.Sprintf("%s was already registered", def.Name),
 		}
 	}
+	c.RUnlock()
 
 	// In order to get the returned arg's type, we have to invoke the build
 	// TODO: think a better way to handle this
 	ret := def.Build(c)
 	ftype := reflect.TypeOf(ret)
 	def.Type = ftype
+
+	c.Lock()
+	defer c.Unlock()
+
 	c.builders[def.Name] = def.Build
 	c.defs[ftype] = def
 	c.store[def.Name] = ret
@@ -137,7 +143,14 @@ func (c *Container) Replace(def *Definition) error {
 	return c.register(def, true)
 }
 
-// Invoke to invokes the input function with  args provided from the container
+// Resolve is similiar to Get instead returning an interface.
+// this will assign the value gotten from the container to the passed arg
+func (c *Container) Resolve(value interface{}) error {
+	// TODO: implement this
+	return nil
+}
+
+// Invoke makes the input function to be called with args provided from the container
 func (c *Container) Invoke(function interface{}) error {
 	ftype := reflect.TypeOf(function)
 	if ftype == nil {

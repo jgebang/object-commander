@@ -77,6 +77,25 @@ func TestRegister(t *testing.T) {
 
 }
 
+func TestGetInRegister(t *testing.T) {
+
+	c := NewContainer()
+	configName := Identity("config")
+	configBuild := func(c *Container) interface{} {
+		return "config"
+	}
+
+	dbName := Identity("db")
+	dbBuild := func(c *Container) interface{} {
+		c.Get(Identity("config"))
+		return "db"
+	}
+
+	c.Register(configName, configBuild)
+	c.Register(dbName, dbBuild)
+
+}
+
 func TestGetAndLazyCreate(t *testing.T) {
 
 	c := NewContainer()

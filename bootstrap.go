@@ -5,10 +5,10 @@ import (
 )
 
 // Manager handles the resource's initialization and release
-type Manager interface {
-	ID() Identity
-	Start(c *Container) error
-	Close(c *Container) error
+type Manager struct {
+	ID    Identity
+	Start interface{} // Start is a function responsible for initialization ex. init db instance
+	Close interface{} // Close is a function responsible for releasing resources.
 }
 
 // NewBootstrap creates a bootstrap instance
@@ -38,7 +38,7 @@ func (b *Bootstrap) GetContainer() *Container {
 // Release releases the resources which collected by the procedures
 func (b *Bootstrap) Release() {
 	for _, p := range b.successful_procedures {
-		p.Close(b.container)
+		b.container.Invoke(p.Close)
 	}
 
 	b.container.FlushALL()
@@ -50,7 +50,7 @@ func (b *Bootstrap) Release() {
 func (b *Bootstrap) Boot(procedures []Manager) *Bootstrap {
 
 	for _, p := range procedures {
-		err := p.Start(b.container)
+		err := b.container.Register(p.ID, p.Start)
 
 		if err == nil {
 			b.successful_procedures = append(b.successful_procedures, p)

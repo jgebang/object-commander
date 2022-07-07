@@ -50,12 +50,12 @@ func (c *Container) bind(b Builder) (*reflect.Value, error) {
 		return nil, fmt.Errorf("can't invoke non-function: %v(type:%s)", b, ftype)
 	}
 
-	if ftype.NumOut() > 0 {
+	if ftype.NumOut() != 1 {
 		return nil, fmt.Errorf("expect builder function returns one value")
 	}
 
 	args := buildParams(ftype, c)
-	ret := invoker(reflect.ValueOf(ftype), args)
+	ret := invoker(reflect.ValueOf(b), args)
 	return &ret[0], nil
 }
 
@@ -71,6 +71,17 @@ func (c *Container) Register(name Identity, build Builder) error {
 		}
 	}
 	c.RUnlock()
+
+	c.Lock()
+	fn := reflect.TypeOf((build))
+	retType := fn.Out(0)
+
+	c.defs[name] = build
+	c.typeToIdentity[retType] = append(
+		c.typeToIdentity[retType],
+		name)
+
+	c.Unlock()
 
 	return nil
 }
@@ -114,9 +125,6 @@ func (c *Container) Get(name Identity) (interface{}, error) {
 	obj := ret.Interface()
 
 	c.store[name] = obj
-	c.typeToIdentity[ret.Type()] = append(
-		c.typeToIdentity[ret.Type()],
-		name)
 
 	return obj, nil
 }

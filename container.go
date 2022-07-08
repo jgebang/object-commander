@@ -20,71 +20,73 @@ func (a AlreadyRegisteredError) Error() string {
 	return a.msg
 }
 
-// Builder generate the resrouce
-type Builder func(c *Container) interface{}
-
-// Definition defines the
-type Definition struct {
-	Name  Identity
-	Type  reflect.Type
-	Build Builder
-}
+// Builder is a function to generate the resrouce
+type Builder interface{}
 
 // NewContainer creates a new container
 func NewContainer() *Container {
 	return &Container{
-		builders: make(map[Identity]Builder),
-		store:    make(map[Identity]interface{}),
-		defs:     make(map[reflect.Type]*Definition),
+		store:          make(map[Identity]interface{}),
+		defs:           make(map[Identity]Builder),
+		typeToIdentity: make(map[reflect.Type][]Identity),
 	}
 }
 
 // Container is global object accessor and can be used as dependency injection
 type Container struct {
-	builders map[Identity]Builder
-	defs     map[reflect.Type]*Definition
-	store    map[Identity]interface{}
+	defs           map[Identity]Builder
+	typeToIdentity map[reflect.Type][]Identity
+	store          map[Identity]interface{}
 	sync.RWMutex
 }
 
-// Register adds the definition to builders
-func (c *Container) register(def *Definition, overwrite bool) error {
-
-	c.RLock()
-	if _, exists := c.builders[def.Name]; exists && !overwrite {
-
-		c.RUnlock()
-		return AlreadyRegisteredError{
-			msg: fmt.Sprintf("%s was already registered", def.Name),
-		}
+func (c *Container) bind(b Builder) (*reflect.Value, error) {
+	ftype := reflect.TypeOf(b)
+	if ftype == nil {
+		return nil, errors.New("can't invoke nil type")
 	}
-	c.RUnlock()
 
-	// In order to get the returned arg's type, we have to invoke the build
-	// TODO: think a better way to handle this
-	ret := def.Build(c)
-	ftype := reflect.TypeOf(ret)
-	def.Type = ftype
+	if ftype.Kind() != reflect.Func {
+		return nil, fmt.Errorf("can't invoke non-function: %v(type:%s)", b, ftype)
+	}
 
-	c.Lock()
-	defer c.Unlock()
+	if ftype.NumOut() != 1 {
+		return nil, fmt.Errorf("expect builder function returns one value")
+	}
 
-	c.builders[def.Name] = def.Build
-	c.defs[ftype] = def
-	c.store[def.Name] = ret
-
-	return nil
+	args, err := buildParams(ftype, c)
+	if err != nil {
+		return nil, err
+	}
+	ret := invoker(reflect.ValueOf(b), args)
+	return &ret[0], nil
 }
 
 // Register add the definition to builders
 func (c *Container) Register(name Identity, build Builder) error {
 
-	def := &Definition{
-		Name:  name,
-		Build: build,
-	}
+	c.RLock()
+	if _, exists := c.defs[name]; exists {
 
-	return c.register(def, false)
+		c.RUnlock()
+		return AlreadyRegisteredError{
+			msg: fmt.Sprintf("%s was already registered", name),
+		}
+	}
+	c.RUnlock()
+
+	c.Lock()
+	fn := reflect.TypeOf((build))
+	retType := fn.Out(0)
+
+	c.defs[name] = build
+	c.typeToIdentity[retType] = append(
+		c.typeToIdentity[retType],
+		name)
+
+	c.Unlock()
+
+	return nil
 }
 
 // Unregister removes the definition from the builders
@@ -92,15 +94,37 @@ func (c *Container) Unregister(name Identity) {
 	c.Lock()
 	defer c.Unlock()
 
-	delete(c.builders, name)
+	delete(c.defs, name)
 	delete(c.store, name)
 }
 
 // FlushALL clears all registered builders
 func (c *Container) FlushALL() {
-	for key := range c.builders {
+	for key := range c.defs {
 		c.Unregister(key)
 	}
+
+	c.typeToIdentity = make(map[reflect.Type][]Identity)
+}
+
+func (c *Container) GetByType(t reflect.Type) (interface{}, error) {
+
+	if len(c.typeToIdentity[t]) == 0 {
+		return nil, fmt.Errorf("there is no instance registered with type: %s", t)
+	}
+
+	id := c.typeToIdentity[t][0]
+
+	return c.Get(id)
+}
+
+func (c *Container) MustGet(name Identity) interface{} {
+	result, err := c.Get(name)
+	if err != nil {
+		panic(err)
+	}
+
+	return result
 }
 
 // Get to get a singleton resource
@@ -113,45 +137,80 @@ func (c *Container) Get(name Identity) (interface{}, error) {
 	}
 	c.RUnlock()
 
-	obj, err := c.Create(name)
+	ret, err := c.create(name)
 	if err != nil {
 		return nil, err
 	}
 
+	obj := ret.Interface()
+
 	c.Lock()
 	defer c.Unlock()
 	c.store[name] = obj
+
 	return obj, nil
 }
 
-// Create to create a new resource from the builder definition
-func (c *Container) Create(name Identity) (interface{}, error) {
-	c.RLock()
-	defer c.RUnlock()
-
-	builder, exists := c.builders[name]
+func (c *Container) create(name Identity) (*reflect.Value, error) {
+	builder, exists := c.defs[name]
 
 	if !exists {
 		return nil, fmt.Errorf("%s was not registered", name)
 	}
 
-	return builder(c), nil
+	// how to perform builder here, I think I need to rely on the invoke
+	ret, err := c.bind(builder)
+	if err != nil {
+		return nil, err
+	}
+
+	return ret, nil
 }
 
-// Replace to replace the registered definition
-func (c *Container) Replace(def *Definition) error {
-	return c.register(def, true)
+// Create to create a new resource from the builder definition
+func (c *Container) Create(name Identity) (interface{}, error) {
+	c.Lock()
+	defer c.Unlock()
+
+	ret, err := c.create(name)
+	if err != nil {
+		return nil, err
+	}
+
+	return ret.Interface(), nil
 }
 
-// Resolve is similiar to Get instead returning an interface.
-// this will assign the value gotten from the container to the passed arg
-func (c *Container) Resolve(value interface{}) error {
-	// TODO: implement this
+// Assign is similar to Get instead returning an interface.
+// this will assign the value taken from the container to the arg and
+// you can specify the identity to indicate which instance you want to
+// be assigned.
+func (c *Container) Assign(value interface{}, ids ...Identity) error {
+	var result interface{}
+	var err error
+
+	valueType := reflect.TypeOf(value)
+	if valueType == nil {
+		return errors.New("input value should not be nil")
+	}
+
+	et := valueType.Elem()
+	if len(ids) > 0 {
+		if result, err = c.Get(ids[0]); err != nil {
+			return err
+		}
+	} else {
+		if result, err = c.GetByType(et); err != nil {
+			return err
+		}
+	}
+
+	reflect.ValueOf(value).Elem().Set(reflect.ValueOf(result))
+
 	return nil
 }
 
 // Invoke makes the input function to be called with args provided from the container
-func (c *Container) Invoke(function interface{}) error {
+func (c *Container) Invoke(function interface{}, ids ...Identity) error {
 	ftype := reflect.TypeOf(function)
 	if ftype == nil {
 		return errors.New("can't invoke nil type")
@@ -162,7 +221,10 @@ func (c *Container) Invoke(function interface{}) error {
 	}
 
 	// how to collect the args
-	args := buildParams(ftype, c)
+	args, err := buildParams(ftype, c, ids...)
+	if err != nil {
+		return err
+	}
 
 	ret := invoker(reflect.ValueOf(function), args)
 	if len(ret) == 0 {
@@ -181,8 +243,10 @@ func (c *Container) Invoke(function interface{}) error {
 }
 
 // grabe the args from the fn and build them from the container
-func buildParams(fn reflect.Type, c *Container) []reflect.Value {
+func buildParams(fn reflect.Type, c *Container, ids ...Identity) ([]reflect.Value, error) {
 	args := []reflect.Value{}
+	var arg interface{}
+	var err error
 	numArgs := fn.NumIn()
 
 	// currently do not consider to support variadic arguments
@@ -193,12 +257,23 @@ func buildParams(fn reflect.Type, c *Container) []reflect.Value {
 	for i := 0; i < numArgs; i++ {
 		argType := fn.In(i)
 		// try to get the arg from the container with argType?
-		arg, _ := c.Get(c.defs[argType].Name)
+		if len(ids) > 0 {
+			if arg, err = c.Get(ids[i]); err != nil {
+				return nil, err
+			}
+		} else {
+
+			if arg, err = c.GetByType(argType); err != nil {
+				return nil, err
+			}
+
+		}
+
 		what := reflect.ValueOf(arg)
 		args = append(args, what)
 	}
 
-	return args
+	return args, nil
 }
 
 func invoker(fn reflect.Value, args []reflect.Value) []reflect.Value {

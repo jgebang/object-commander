@@ -9,60 +9,42 @@ import (
 // a global variable for testing usage
 var loadtracker string
 
-type dbManager struct {
-}
-
-func (dbm *dbManager) ID() Identity {
-	return Identity("db")
-}
-
-func (dbm *dbManager) Start(c *Container) error {
-
-	c.Register(dbm.ID(), func(c *Container) interface{} {
+var dbManager = Manager{
+	ID: Identity("db"),
+	Start: func() string {
 		loadtracker += "db"
 		return "db"
-	})
+	},
+	Close: func(c *Container) error {
+		db, err := c.Get(Identity("db"))
+		if err != nil {
+			return err
+		}
 
-	return nil
+		loadtracker = strings.Replace(loadtracker, "db", "", 1) // represent db resource is released
+		fmt.Printf("%s is closed\n", db.(string))
+		return nil
+
+	},
 }
 
-func (dbm *dbManager) Close(c *Container) error {
-
-	db, err := c.Get(dbm.ID())
-	if err != nil {
-		return err
-	}
-
-	loadtracker = strings.Replace(loadtracker, "db", "", 1) // represent db resource is released
-	fmt.Printf("%s is closed\n", db.(string))
-	return nil
-}
-
-type logManager struct{}
-
-func (l *logManager) ID() Identity {
-	return Identity("log")
-}
-
-func (l *logManager) Start(c *Container) error {
-	c.Register(l.ID(), func(c *Container) interface{} {
+var logManager = Manager{
+	ID: Identity("log"),
+	Start: func() string {
 		loadtracker += "log"
 		return "log"
-	})
+	},
+	Close: func(c *Container) error {
+		log, err := c.Get(Identity("log"))
+		if err != nil {
+			return err
+		}
 
-	return nil
-}
+		loadtracker = strings.Replace(loadtracker, "log", "", 1) // represent log resource is released
+		fmt.Printf("%s is closed\n", log.(string))
+		return nil
 
-func (l *logManager) Close(c *Container) error {
-
-	log, err := c.Get(l.ID())
-	if err != nil {
-		return err
-	}
-
-	loadtracker = strings.Replace(loadtracker, "log", "", 1) // represent log resource is released
-	fmt.Printf("%s is closed\n", log.(string))
-	return nil
+	},
 }
 
 func TestNewBootstrap(t *testing.T) {
@@ -79,11 +61,18 @@ func TestBoot(t *testing.T) {
 
 	b := NewBootstrap(nil)
 	steps := []Manager{
-		&dbManager{},
-		&logManager{},
+		dbManager,
+		logManager,
 	}
 
 	b.Boot(steps).Run(func() {
+		// mimic we are using the registered resources here
+		db := b.container.MustGet(Identity("db")).(string)
+		log := b.container.MustGet(Identity("log")).(string)
+
+		if db != "db" && log != "log" {
+			t.Error("get the wrong resources")
+		}
 
 		if loadtracker != "dblog" {
 			t.Error("steps were not executed")

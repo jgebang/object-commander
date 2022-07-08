@@ -1,14 +1,16 @@
 package objectcommander
 
 import (
+	"errors"
+	"fmt"
 	"sync"
 )
 
 // Manager handles the resource's initialization and release
-type Manager interface {
-	ID() Identity
-	Start(c *Container) error
-	Close(c *Container) error
+type Manager struct {
+	ID    Identity
+	Start interface{}              // Start is a function responsible for initialization ex. init db instance
+	Close func(c *Container) error // Close is a function responsible for releasing resources.
 }
 
 // NewBootstrap creates a bootstrap instance
@@ -36,21 +38,30 @@ func (b *Bootstrap) GetContainer() *Container {
 }
 
 // Release releases the resources which collected by the procedures
-func (b *Bootstrap) Release() {
+func (b *Bootstrap) Release() error {
+	errorContent := ""
+
 	for _, p := range b.successful_procedures {
-		p.Close(b.container)
+		if err := p.Close(b.container); err != nil {
+			errorContent += fmt.Sprintf("an error happens when closing a manager %s: %s", p.ID, err.Error())
+		}
 	}
 
 	b.container.FlushALL()
 	b.successful_procedures = []Manager{}
 
+	if errorContent != "" {
+		return errors.New(errorContent)
+	}
+
+	return nil
 }
 
 // Boot executes the series of procedures
 func (b *Bootstrap) Boot(procedures []Manager) *Bootstrap {
 
 	for _, p := range procedures {
-		err := p.Start(b.container)
+		err := b.container.Register(p.ID, p.Start)
 
 		if err == nil {
 			b.successful_procedures = append(b.successful_procedures, p)

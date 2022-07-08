@@ -9,7 +9,7 @@ func TestNewContainer(t *testing.T) {
 
 	c := NewContainer()
 
-	if c.builders == nil || c.store == nil {
+	if c.defs == nil || c.typeToIdentity == nil || c.store == nil {
 		t.Error("failed to new a container instance")
 	}
 
@@ -25,7 +25,7 @@ func TestInvoke(t *testing.T) {
 
 	c.Register(
 		Identity("song"),
-		func(c *Container) interface{} {
+		func() A {
 			return A{Name: "yo"}
 		})
 
@@ -34,6 +34,59 @@ func TestInvoke(t *testing.T) {
 			t.Error("invoke with wrong arg")
 		}
 	})
+}
+
+func TestAssign(t *testing.T) {
+
+	c := NewContainer()
+
+	type Person struct{ Age int }
+
+	c.Register(Identity("p"), func() Person {
+		return Person{Age: 10}
+	})
+
+	var pp Person
+	c.Assign(&pp)
+
+	if pp.Age != 10 {
+		t.Error("failed to assign")
+	}
+
+}
+
+func TestInvokeWithSpecifiedIdentity(t *testing.T) {
+	// we register two different instance of struct A
+
+	c := NewContainer()
+	type A struct {
+		Name string
+	}
+
+	c.Register(
+		Identity("alice"),
+		func() A {
+			return A{Name: "I am Alice"}
+		})
+
+	c.Register(
+		Identity("bob"),
+		func() A {
+			return A{Name: "I am Bob"}
+		})
+
+	c.Invoke(func(a A) {
+		if a.Name != "I am Alice" {
+			t.Errorf("By default, it should get the first registerd instance if there is no identity specified. but we get %s", a.Name)
+		}
+	})
+
+	c.Invoke(func(a A) {
+		if a.Name != "I am Bob" {
+			t.Errorf("we should get the indicated instance instead of %s", a.Name)
+		}
+	}, Identity("bob"))
+
 }
 
 func TestRegister(t *testing.T) {
@@ -45,13 +98,13 @@ func TestRegister(t *testing.T) {
 	var loadedDefs string
 
 	configName := Identity("config")
-	configBuild := func(c *Container) interface{} {
+	configBuild := func() string {
 		loadedDefs += "config"
 		return "config"
 	}
 
 	dbName := Identity("db")
-	dbBuild := func(c *Container) interface{} {
+	dbBuild := func() string {
 		loadedDefs += "db"
 		return "db"
 	}
@@ -71,28 +124,41 @@ func TestRegister(t *testing.T) {
 		t.Error("failed to register config in container")
 	}
 
-	// if loadedDefs != "" {
-	// 	t.Error("register should be a lazy action")
-	// }
+	if loadedDefs != "" {
+		t.Error("register should be a lazy action")
+	}
 
 }
 
-func TestGetInRegister(t *testing.T) {
+func TestGetWithDependencies(t *testing.T) {
 
 	c := NewContainer()
 	configName := Identity("config")
-	configBuild := func(c *Container) interface{} {
+	configBuild := func() string {
 		return "config"
 	}
 
+	type DB struct{ Name string }
+
 	dbName := Identity("db")
-	dbBuild := func(c *Container) interface{} {
-		c.Get(Identity("config"))
-		return "db"
+	dbBuild := func(config string) DB {
+		if config != "config" {
+			t.Errorf("doesn't get the config from container")
+		}
+		return DB{Name: "sql"}
 	}
 
 	c.Register(configName, configBuild)
 	c.Register(dbName, dbBuild)
+
+	db, err := c.Get(Identity("db"))
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	if d, ok := db.(DB); !ok {
+		t.Errorf("get error instance: %v", d)
+	}
 
 }
 
@@ -105,15 +171,18 @@ func TestGetAndLazyCreate(t *testing.T) {
 	var loadedDefs string
 
 	configName := Identity("config")
-	configBuild := func(c *Container) interface{} {
+	configBuild := func() string {
 		loadedDefs += "config"
 		return "config"
 	}
 
 	dbName := Identity("db")
-	dbBuild := func(c *Container) interface{} {
+
+	type DB struct{ Name string }
+
+	dbBuild := func() DB {
 		loadedDefs += "db"
-		return "db"
+		return DB{Name: "sql"}
 	}
 
 	c.Register(configName, configBuild)
@@ -125,7 +194,7 @@ func TestGetAndLazyCreate(t *testing.T) {
 	}
 
 	db, err := c.Get(Identity("db"))
-	if err != nil || db.(string) != "db" {
+	if err != nil || db.(DB).Name != "sql" {
 		t.Error("failed to db config from container")
 	}
 
@@ -159,7 +228,7 @@ func TestUnregisterd(t *testing.T) {
 	c.Register(configName, configBuild)
 	c.Unregister(Identity("config"))
 
-	if len(c.store) != 0 && len(c.builders) != 0 {
+	if len(c.store) != 0 && len(c.defs) != 0 {
 		t.Error("failed to unregisterd")
 	}
 

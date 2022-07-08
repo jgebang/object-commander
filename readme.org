@@ -29,7 +29,7 @@
   - make your initialization explicity
   - reduce the opportunity of circular import
 
-* example
+* Example
 
 Bootstrap relies on the a minimum container which stores or creates the instance from the resources have been registered.
 Define a ~Manager~ structure to handle the resource's initialization and release and put it the ~Boot~ function. This will ensure the setup is run before starting the main procedure.

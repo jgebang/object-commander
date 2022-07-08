@@ -1,6 +1,7 @@
 package objectcommander
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -77,7 +78,7 @@ func TestInvokeWithSpecifiedIdentity(t *testing.T) {
 
 	c.Invoke(func(a A) {
 		if a.Name != "I am Alice" {
-			t.Errorf("By default, it should get the first registerd instance if there is no identity specified. but we get %s", a.Name)
+			t.Errorf("By default, it should get the first registered instance if there is no identity specified. but we get %s", a.Name)
 		}
 	})
 
@@ -126,6 +127,32 @@ func TestRegister(t *testing.T) {
 
 	if loadedDefs != "" {
 		t.Error("register should be a lazy action")
+	}
+
+}
+
+func TestGet(t *testing.T) {
+
+	c := NewContainer()
+	id := Identity("config")
+
+	c.Register(id, func() string {
+		return "config"
+	})
+
+	instance, err := c.Create(id)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if instance.(string) != "config" {
+		t.Error("get an unexpected instance")
+	}
+
+	// trying to get an unregistered instance
+	_, err = c.Create(Identity("non"))
+	if err == nil {
+		t.Error("we should get an error with non registered instance here")
 	}
 
 }
@@ -207,17 +234,33 @@ func TestGetAndLazyCreate(t *testing.T) {
 	}
 }
 
-func TestGetNonRegisterdDef(t *testing.T) {
-
+func TestGetNonRegisteredDef(t *testing.T) {
 	c := NewContainer()
 
 	_, err := c.Get(Identity("nop"))
 	if !strings.Contains(err.Error(), "was not registered") {
 		t.Error("failed to detect nop is not registered")
 	}
+
+	_, err = c.GetByType(reflect.TypeOf("hello"))
+	if !strings.Contains(err.Error(), "there is no instance") {
+		t.Error("failed to detect non registered instance with specified type")
+	}
 }
 
-func TestUnregisterd(t *testing.T) {
+func TestMustGet(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected to get a panic")
+		}
+	}()
+
+	c := NewContainer()
+	_ = c.MustGet(Identity("nop"))
+
+}
+
+func TestUnregistered(t *testing.T) {
 
 	c := NewContainer()
 	configName := Identity("config")
@@ -229,7 +272,7 @@ func TestUnregisterd(t *testing.T) {
 	c.Unregister(Identity("config"))
 
 	if len(c.store) != 0 && len(c.defs) != 0 {
-		t.Error("failed to unregisterd")
+		t.Error("failed to unregistered")
 	}
 
 }

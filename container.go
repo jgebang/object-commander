@@ -10,7 +10,7 @@ import (
 // Identity is a unique name for container resource and bootstrap
 type Identity string
 
-// AlreadRegisteredError is an error for reregisteration
+// AlreadyRegisteredError is an error for reregisteration
 type AlreadyRegisteredError struct {
 	msg string
 }
@@ -40,18 +40,30 @@ type Container struct {
 	sync.RWMutex
 }
 
-func (c *Container) bind(b Builder) (*reflect.Value, error) {
-	ftype := reflect.TypeOf(b)
+// checkBuilderSignature is an helper function to check the interface if matched the format
+// for generating the resource.
+func checkBuilderSignature(ftype reflect.Type) error {
+
 	if ftype == nil {
-		return nil, errors.New("can't invoke nil type")
+		return errors.New("can't invoke nil type")
 	}
 
 	if ftype.Kind() != reflect.Func {
-		return nil, fmt.Errorf("can't invoke non-function: %v(type:%s)", b, ftype)
+		return fmt.Errorf("can't invoke non-function: %s", ftype)
 	}
 
 	if ftype.NumOut() != 1 {
-		return nil, fmt.Errorf("expect builder function returns one value")
+		return fmt.Errorf("expect builder function returns one value")
+	}
+
+	return nil
+}
+
+func (c *Container) bind(b Builder) (*reflect.Value, error) {
+	ftype := reflect.TypeOf(b)
+
+	if err := checkBuilderSignature(ftype); err != nil {
+		return nil, err
 	}
 
 	args, err := buildParams(ftype, c)
@@ -89,24 +101,43 @@ func (c *Container) Register(name Identity, build Builder) error {
 	return nil
 }
 
+func pop(source []Identity, target Identity) []Identity {
+	var index = 0
+
+	for i, value := range source {
+		if value == target {
+			index = i
+			break
+		}
+	}
+
+	return append(source[:index], source[index+1:]...)
+}
+
 // Unregister removes the definition from the builders
 func (c *Container) Unregister(name Identity) {
 	c.Lock()
 	defer c.Unlock()
 
+	builder := c.defs[name]
+	fn := reflect.TypeOf(builder)
+	retType := fn.Out(0)
+
+	pop(c.typeToIdentity[retType], name)
 	delete(c.defs, name)
 	delete(c.store, name)
 }
 
 // FlushALL clears all registered builders
 func (c *Container) FlushALL() {
-	for key := range c.defs {
-		c.Unregister(key)
-	}
-
+	c.defs = make(map[Identity]Builder)
+	c.store = make(map[Identity]interface{})
 	c.typeToIdentity = make(map[reflect.Type][]Identity)
 }
 
+// GetByType works like get but instead of getting instance by the identity,
+// this will allow you give a type and automatically induct the identity
+// for you
 func (c *Container) GetByType(t reflect.Type) (interface{}, error) {
 
 	if len(c.typeToIdentity[t]) == 0 {
@@ -118,6 +149,9 @@ func (c *Container) GetByType(t reflect.Type) (interface{}, error) {
 	return c.Get(id)
 }
 
+// MustGet is an helper for Get without returning error. It will
+// panic once if there is an error happens so pleasure ensure you
+// are knowing the instance is actually registered.
 func (c *Container) MustGet(name Identity) interface{} {
 	result, err := c.Get(name)
 	if err != nil {
@@ -158,7 +192,6 @@ func (c *Container) create(name Identity) (*reflect.Value, error) {
 		return nil, fmt.Errorf("%s was not registered", name)
 	}
 
-	// how to perform builder here, I think I need to rely on the invoke
 	ret, err := c.bind(builder)
 	if err != nil {
 		return nil, err
@@ -209,24 +242,7 @@ func (c *Container) Assign(value interface{}, ids ...Identity) error {
 	return nil
 }
 
-// Invoke makes the input function to be called with args provided from the container
-func (c *Container) Invoke(function interface{}, ids ...Identity) error {
-	ftype := reflect.TypeOf(function)
-	if ftype == nil {
-		return errors.New("can't invoke nil type")
-	}
-
-	if ftype.Kind() != reflect.Func {
-		return fmt.Errorf("can't invoke non-function: %v(type:%s)", function, ftype)
-	}
-
-	// how to collect the args
-	args, err := buildParams(ftype, c, ids...)
-	if err != nil {
-		return err
-	}
-
-	ret := invoker(reflect.ValueOf(function), args)
+func maybeError(ret []reflect.Value) error {
 	if len(ret) == 0 {
 		return nil
 	}
@@ -240,6 +256,36 @@ func (c *Container) Invoke(function interface{}, ids ...Identity) error {
 	}
 
 	return nil
+}
+
+// checkCallee is an helper to check the basic required function signature
+func checkCallee(ftype reflect.Type) error {
+	if ftype == nil {
+		return errors.New("can't invoke nil type")
+	}
+
+	if ftype.Kind() != reflect.Func {
+		return fmt.Errorf("can't invoke non-function: %s", ftype)
+	}
+
+	return nil
+}
+
+// Invoke makes the input function to be called with args provided from the container
+func (c *Container) Invoke(function interface{}, ids ...Identity) error {
+	ftype := reflect.TypeOf(function)
+
+	if err := checkCallee(ftype); err != nil {
+		return err
+	}
+
+	// how to collect the args
+	args, err := buildParams(ftype, c, ids...)
+	if err != nil {
+		return err
+	}
+
+	return maybeError(invoker(reflect.ValueOf(function), args))
 }
 
 // grabe the args from the fn and build them from the container

@@ -66,6 +66,13 @@ func TestBoot(t *testing.T) {
 	}
 
 	b.Boot(steps).Run(func() {
+		// mimic we are using the registered resources here
+		db := b.container.MustGet(Identity("db")).(string)
+		log := b.container.MustGet(Identity("log")).(string)
+
+		if db != "db" && log != "log" {
+			t.Error("get the wrong resources")
+		}
 
 		if loadtracker != "dblog" {
 			t.Error("steps were not executed")

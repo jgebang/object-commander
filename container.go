@@ -54,7 +54,10 @@ func (c *Container) bind(b Builder) (*reflect.Value, error) {
 		return nil, fmt.Errorf("expect builder function returns one value")
 	}
 
-	args := buildParams(ftype, c)
+	args, err := buildParams(ftype, c)
+	if err != nil {
+		return nil, err
+	}
 	ret := invoker(reflect.ValueOf(b), args)
 	return &ret[0], nil
 }
@@ -104,6 +107,26 @@ func (c *Container) FlushALL() {
 	c.typeToIdentity = make(map[reflect.Type][]Identity)
 }
 
+func (c *Container) GetByType(t reflect.Type) (interface{}, error) {
+
+	if len(c.typeToIdentity[t]) == 0 {
+		return nil, fmt.Errorf("there is no instance registered with type: %s", t)
+	}
+
+	id := c.typeToIdentity[t][0]
+
+	return c.Get(id)
+}
+
+func (c *Container) MustGet(name Identity) interface{} {
+	result, err := c.Get(name)
+	if err != nil {
+		panic(err)
+	}
+
+	return result
+}
+
 // Get to get a singleton resource
 func (c *Container) Get(name Identity) (interface{}, error) {
 	c.RLock()
@@ -114,9 +137,6 @@ func (c *Container) Get(name Identity) (interface{}, error) {
 	}
 	c.RUnlock()
 
-	c.Lock()
-	defer c.Unlock()
-
 	ret, err := c.create(name)
 	if err != nil {
 		return nil, err
@@ -124,6 +144,8 @@ func (c *Container) Get(name Identity) (interface{}, error) {
 
 	obj := ret.Interface()
 
+	c.Lock()
+	defer c.Unlock()
 	c.store[name] = obj
 
 	return obj, nil
@@ -164,6 +186,8 @@ func (c *Container) Create(name Identity) (interface{}, error) {
 // be assigned.
 func (c *Container) Assign(value interface{}, ids ...Identity) error {
 	var result interface{}
+	var err error
+
 	valueType := reflect.TypeOf(value)
 	if valueType == nil {
 		return errors.New("input value should not be nil")
@@ -171,10 +195,13 @@ func (c *Container) Assign(value interface{}, ids ...Identity) error {
 
 	et := valueType.Elem()
 	if len(ids) > 0 {
-		result = c.store[ids[0]]
+		if result, err = c.Get(ids[0]); err != nil {
+			return err
+		}
 	} else {
-		id := c.typeToIdentity[et][0]
-		result = c.store[id]
+		if result, err = c.GetByType(et); err != nil {
+			return err
+		}
 	}
 
 	reflect.ValueOf(value).Elem().Set(reflect.ValueOf(result))
@@ -194,7 +221,10 @@ func (c *Container) Invoke(function interface{}, ids ...Identity) error {
 	}
 
 	// how to collect the args
-	args := buildParams(ftype, c, ids...)
+	args, err := buildParams(ftype, c, ids...)
+	if err != nil {
+		return err
+	}
 
 	ret := invoker(reflect.ValueOf(function), args)
 	if len(ret) == 0 {
@@ -213,8 +243,10 @@ func (c *Container) Invoke(function interface{}, ids ...Identity) error {
 }
 
 // grabe the args from the fn and build them from the container
-func buildParams(fn reflect.Type, c *Container, ids ...Identity) []reflect.Value {
+func buildParams(fn reflect.Type, c *Container, ids ...Identity) ([]reflect.Value, error) {
 	args := []reflect.Value{}
+	var arg interface{}
+	var err error
 	numArgs := fn.NumIn()
 
 	// currently do not consider to support variadic arguments
@@ -224,19 +256,24 @@ func buildParams(fn reflect.Type, c *Container, ids ...Identity) []reflect.Value
 
 	for i := 0; i < numArgs; i++ {
 		argType := fn.In(i)
-		var arg interface{}
 		// try to get the arg from the container with argType?
 		if len(ids) > 0 {
-			arg, _ = c.Get(ids[i])
+			if arg, err = c.Get(ids[i]); err != nil {
+				return nil, err
+			}
 		} else {
-			arg, _ = c.Get(c.typeToIdentity[argType][0])
+
+			if arg, err = c.GetByType(argType); err != nil {
+				return nil, err
+			}
+
 		}
 
 		what := reflect.ValueOf(arg)
 		args = append(args, what)
 	}
 
-	return args
+	return args, nil
 }
 
 func invoker(fn reflect.Value, args []reflect.Value) []reflect.Value {

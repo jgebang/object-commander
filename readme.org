@@ -31,34 +31,22 @@
 
 * example
 
+Bootstrap relies on the a minimum container which stores or creates the instance from the resources have been registered.
+Define a ~Manager~ structure to handle the resource's initialization and release and put it the ~Boot~ function. This will ensure the setup is run before starting the main procedure.
+
   #+begin_src go
-    type dbManager struct {}
 
-    func (d *dbManager) ID() Identity {
-        return Identity("db")
-    }
-
-    func (d *dbManager) Start(c *Container) error {
-        c.Register(&Definition{
-            Name: d.ID(),
-            Build: func(c *Container) interface{} {
-                // create db connection
-            },
-        })
-
+    var dbManager = Manager {
+      ID: Identity("db"),
+      Start: func() string {
+        return "db"
+      }
+      Close: func(c *Container) error {
+        // release the resource
         return nil
+      }
     }
 
-    func (d *dbManager) Close(c *Container) error {
-
-        db, err := c.Get(d.ID())
-        if err != nil {
-            return err
-        }
-
-        // release db connection
-        return nil
-    }
   #+end_src
 
 
@@ -66,7 +54,7 @@
     // in your main.go
     b := NewBootstrap(nil)
     steps := []Manager{
-        &dbManager{},
+        dbManager,
     }
 
     b.Boot(steps, false).Run(func() {
@@ -74,4 +62,5 @@
         // ex.
         // run server
     })
+
   #+end_src

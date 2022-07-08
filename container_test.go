@@ -36,6 +36,25 @@ func TestInvoke(t *testing.T) {
 	})
 }
 
+func TestAssign(t *testing.T) {
+
+	c := NewContainer()
+
+	type Person struct{ Age int }
+
+	c.Register(Identity("p"), func() Person {
+		return Person{Age: 10}
+	})
+
+	var pp Person
+	c.Assign(&pp)
+
+	if pp.Age != 10 {
+		t.Error("failed to assign")
+	}
+
+}
+
 func TestInvokeWithSpecifiedIdentity(t *testing.T) {
 	// we register two different instance of struct A
 
@@ -46,13 +65,13 @@ func TestInvokeWithSpecifiedIdentity(t *testing.T) {
 
 	c.Register(
 		Identity("alice"),
-		func(c *Container) interface{} {
+		func() A {
 			return A{Name: "I am Alice"}
 		})
 
 	c.Register(
 		Identity("bob"),
-		func(c *Container) interface{} {
+		func() A {
 			return A{Name: "I am Bob"}
 		})
 
@@ -123,6 +142,9 @@ func TestGetWithDependencies(t *testing.T) {
 
 	dbName := Identity("db")
 	dbBuild := func(config string) DB {
+		if config != "config" {
+			t.Errorf("doesn't get the config from container")
+		}
 		return DB{Name: "sql"}
 	}
 
@@ -149,15 +171,18 @@ func TestGetAndLazyCreate(t *testing.T) {
 	var loadedDefs string
 
 	configName := Identity("config")
-	configBuild := func(c *Container) interface{} {
+	configBuild := func() string {
 		loadedDefs += "config"
 		return "config"
 	}
 
 	dbName := Identity("db")
-	dbBuild := func(c *Container) interface{} {
+
+	type DB struct{ Name string }
+
+	dbBuild := func() DB {
 		loadedDefs += "db"
-		return "db"
+		return DB{Name: "sql"}
 	}
 
 	c.Register(configName, configBuild)
@@ -169,7 +194,7 @@ func TestGetAndLazyCreate(t *testing.T) {
 	}
 
 	db, err := c.Get(Identity("db"))
-	if err != nil || db.(string) != "db" {
+	if err != nil || db.(DB).Name != "sql" {
 		t.Error("failed to db config from container")
 	}
 
